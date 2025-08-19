@@ -1,0 +1,5 @@
+/.vscode
+/out
+/simulations/results
+/simulations/.qtenvrc
+/src/*.exe

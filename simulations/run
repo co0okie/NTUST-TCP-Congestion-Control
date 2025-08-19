@@ -1,0 +1,4 @@
+#!/bin/sh
+cd `dirname $0`
+../src/ntust_tcp_congestion_control -n .:../src $*
+# for shared lib, use: opp_run -l ../src/ntust_tcp_congestion_control -n .:../src $*
