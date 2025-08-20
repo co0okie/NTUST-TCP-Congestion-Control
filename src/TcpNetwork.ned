@@ -11,10 +11,18 @@ simple TcpModule {
         inout ip;
 }
 
+module ServerModule extends TcpModule {
+    @class(ServerModule);
+}
+
+module ClientModule extends TcpModule {
+    @class(ClientModule);
+}
+
 network TcpNetwork {
     submodules:
-        client: TcpModule;
-        server: TcpModule;
+        client: ClientModule;
+        server: ServerModule;
     connections:
         client.ip <--> RealisticChannel { droprate = 0.3; } <--> server.ip;
 }
