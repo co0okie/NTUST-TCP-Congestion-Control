@@ -1,9 +1,13 @@
 #include <omnetpp.h>
 #include <deque>
+#include <map>
 #include <string>
 #include "tcp_m.h"
+#include "LossyChannel.h"
 
-using namespace omnetpp;
+using std::deque, std::string, std::to_string, std::map;
+
+using omnetpp::cSimpleModule, omnetpp::cMessage;
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -14,52 +18,25 @@ typedef int32_t i32;
 typedef int16_t i16;
 typedef int8_t i8;
 
-class LossyChannel : public cDatarateChannel {
-  private:
-    double droprate;
-  public:
-    void setDroprate(double droprate) {
-        this->droprate = droprate;
-    }
-    double getDroprate() {
-        return droprate;
-    }
-  protected:
-    virtual Result processMessage(cMessage *msg, const SendOptions& options, simtime_t t) override {
-        Result result = cDatarateChannel::processMessage(msg, options, t);
-        if (uniform(0,1) < droprate) {
-            result.discard = true;
-            std::string dropMsg = std::string{msg->getName()} + " is dropped.\n";
-            EV << dropMsg;
-            bubble(dropMsg.c_str());
-        }
-        return result;
-    }
-    virtual void initialize() override {
-        cDatarateChannel::initialize();
-        droprate = par("droprate");
-    }
-};
-
-Define_Channel(LossyChannel);
 
 class TcpModule : public cSimpleModule {
   private:
     u32 mss;
-    u32 seq;
     u32 seq_begin;
-    u32 seq_end;
-    u32 ack;
+    u32 seq;
     u32 swnd;
-    u32 rwnd;
-    std::deque<u8> snd_buf;
-    std::deque<u8> rcv_buf;
-    std::map<u32, u32> rcv_ack; // <ack, size>
+    deque<u8> snd_buf;
     double rto;
+
+    u32 ack;
+    bool ACK;
+    u32 rwnd;
+    deque<u8> rcv_buf;
+    map<u32, u32> rcv_ack; // <ack, size>
     cMessage* waitSend = new cMessage("waitSend");
     cMessage* rtoTimer = new cMessage("rtoTimer");
-    void handleWaitSend(cMessage *msg);
-    void handleRtoTimer(cMessage *msg);
+    void handleWaitSend();
+    void handleRtoTimer();
     void handleTcpPacket(TcpPacket* msg);
     void handleAck(TcpPacket* msg);
   protected:
@@ -76,31 +53,31 @@ TcpModule::~TcpModule() {
 }
 
 void TcpModule::initialize() {
-    mss = 2;
-    swnd = 10;
+    mss = 100;
+    swnd = 1000;
     seq_begin = 0;
-    seq_end = seq_begin + swnd;
     seq = seq_begin;
-    rto = 5;
+    rto = 1;
     ack = 0;
-    rwnd = 100;
+    ACK = false;
+    rwnd = 1000;
     rcv_buf.resize(rwnd);
 
-    if (std::string(getName()) == "client") {
-        for (int i = 0; i < 100; i++) {
-            snd_buf.push_back(i);
+    if (string(getName()) == "client") {
+        for (int i = 0; i < 12345; i++) {
+            snd_buf.push_back(u8(i));
         }
     }
     
-    scheduleAt(0.0, waitSend);
+    handleWaitSend();
 }
 
 void TcpModule::handleMessage(cMessage* msg) {
     if (msg == waitSend) {
-        handleWaitSend(msg);
+        handleWaitSend();
     }
     else if (msg == rtoTimer) {
-        handleRtoTimer(msg);
+        handleRtoTimer();
     }
     else if (TcpPacket* tcpMsg = check_and_cast<TcpPacket*>(msg)) {
         handleTcpPacket(tcpMsg);
@@ -108,38 +85,45 @@ void TcpModule::handleMessage(cMessage* msg) {
     }
 }
 
-void TcpModule::handleWaitSend(cMessage* msg) {
+void TcpModule::handleWaitSend() {
+    const i32 sendableByteSize = std::max(0, 
+        i32(seq_begin + std::min(swnd, u32(snd_buf.size())) - seq));
+    const bool hasPayloadToSend = sendableByteSize > 0;
     // nothing to send
-    if (i32(seq_end - seq) <= 0 || i32(seq - seq_begin) >= snd_buf.size()) return;
+    if (!hasPayloadToSend && !ACK) return;
 
     // channel busy
-    auto* channel = gate("ip$o")->getTransmissionChannel();
+    const auto* channel = gate("ip$o")->getTransmissionChannel();
     if (channel->isBusy()) {
         scheduleAt(channel->getTransmissionFinishTime(), waitSend);
         return;
     }
 
-    auto* packet = new TcpPacket(("seq = " + std::to_string(seq)).c_str());
+    const u32 payloadSize = std::min(mss, u32(sendableByteSize));
+    const string packetName = "seq " + to_string(seq) + " ack " + to_string(ack) + 
+        " ACK " + to_string(ACK) + " size " + to_string(payloadSize);
+    auto* packet = new TcpPacket(packetName.c_str());
     packet->setSrc(1);
     packet->setDst(2);
     packet->setSeq(seq);
     packet->setAck(ack);
     packet->setSYN(false);
     packet->setFIN(false);
-    packet->setACK(false);
-    auto begin = snd_buf.begin() + u32(seq - seq_begin);
-    auto size = std::min(mss, (seq_end - seq));
-    packet->setPayloadArraySize(size);
-    for (size_t i = 0; i < size; i++) {
-        packet->setPayload(i, begin[i]);
+    packet->setACK(ACK);
+    ACK = 0;
+    if (hasPayloadToSend) {
+        auto begin = snd_buf.begin() + u32(seq - seq_begin);
+        packet->setPayloadArraySize(payloadSize);
+        for (size_t i = 0; i < payloadSize; i++) {
+            packet->setPayload(i, begin[i]);
+        }
+        seq += payloadSize;
+        if (!rtoTimer->isScheduled()) scheduleAfter(rto, rtoTimer);
     }
-    packet->setByteLength(20 + size);
+    packet->setByteLength(20 + payloadSize);
     send(packet, "ip$o");
-    EV << "sending " << packet->getName();
-    bubble((std::string{"sending "} + std::string{packet->getName()}).c_str());
+    EV << getName() << ": " << packet->getName();
     scheduleAt(channel->getTransmissionFinishTime(), waitSend);
-    if (!rtoTimer->isScheduled()) scheduleAfter(rto, rtoTimer);
-    seq += size;
 }
 
 void TcpModule::handleTcpPacket(TcpPacket* msg) {
@@ -162,20 +146,10 @@ void TcpModule::handleTcpPacket(TcpPacket* msg) {
                 }
             }
         }
-
-        auto* ackMsg = new TcpPacket(("ack = " + std::to_string(ack)).c_str());
-        ackMsg->setSrc(2);
-        ackMsg->setDst(1);
-        ackMsg->setSeq(seq);
-        ackMsg->setAck(ack);
-        ackMsg->setSYN(false);
-        ackMsg->setFIN(false);
-        ackMsg->setACK(true);
-        ackMsg->setByteLength(20);
-        send(ackMsg, "ip$o");
-        EV << "sending " << ackMsg->getName();
-        bubble((std::string{"receive "} + std::to_string(msg->getSeq()) 
-            + ", require " + std::to_string(ack)).c_str());
+    }
+    if (payloadSize) {
+        ACK = true;
+        handleWaitSend();
     }
 }
 
@@ -189,15 +163,14 @@ void TcpModule::handleAck(TcpPacket* msg) {
     if (delSize <= 0) return;
     snd_buf.erase(snd_buf.begin(), snd_buf.begin() + std::min(size_t(delSize), snd_buf.size()));
     seq_begin += delSize;
-    seq_end = seq + swnd;
     cancelEvent(rtoTimer);
     if (!waitSend->isScheduled()) scheduleAfter(0.0, waitSend);
     // if msg->getAck() != seq (not latest)
     if (delSize != 0) scheduleAfter(rto, rtoTimer);
 }
 
-void TcpModule::handleRtoTimer(cMessage* msg) {
+void TcpModule::handleRtoTimer() {
     seq = seq_begin;
     if (!waitSend->isScheduled()) scheduleAfter(0.0, waitSend);
-    EV << "Retransmission Timeout";
+    EV << getName() << ": Retransmission Timeout";
 }

@@ -5,7 +5,7 @@ channel LossyChannel extends ned.DatarateChannel {
 }
 
 channel Channel extends LossyChannel {
-    datarate = 1000bps;
+    datarate = 128kbps;
     delay = 200ms;
 }
 
@@ -19,5 +19,5 @@ network TcpNetwork {
         client: TcpModule;
         server: TcpModule;
     connections:
-        client.ip <--> Channel { droprate = 0.5; } <--> server.ip;
+        client.ip <--> Channel { droprate = 0.3; } <--> server.ip;
 }

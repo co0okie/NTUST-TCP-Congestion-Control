@@ -1,5 +1,12 @@
-/.vscode
-/out
-/simulations/results
+/.vscode/
+/.settings/
+/.cproject
+/.project
+/.oppbuildspec
+/.nedfolders
+/.nedexclusions
+/out/
+/simulations/results/
 /simulations/.qtenvrc
+/simulations/run
 /src/*.exe
