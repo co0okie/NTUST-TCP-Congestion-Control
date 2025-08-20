@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 #include "tcp_m.h"
-#include "LossyChannel.h"
+#include "LossyChannel.hpp"
 
 using std::deque, std::string, std::to_string, std::map;
 
