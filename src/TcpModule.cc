@@ -2,8 +2,7 @@
 #include <deque>
 #include <map>
 #include <string>
-#include "tcp_m.h"
-#include "LossyChannel.hpp"
+#include "TcpPacket_m.h"
 
 using std::deque, std::string, std::to_string, std::map;
 
@@ -69,7 +68,7 @@ void TcpModule::initialize() {
         }
     }
     
-    handleWaitSend();
+    scheduleAfter(0.0, waitSend);
 }
 
 void TcpModule::handleMessage(cMessage* msg) {
@@ -95,7 +94,7 @@ void TcpModule::handleWaitSend() {
     // channel busy
     const auto* channel = gate("ip$o")->getTransmissionChannel();
     if (channel->isBusy()) {
-        scheduleAt(channel->getTransmissionFinishTime(), waitSend);
+        if (!waitSend->isScheduled()) scheduleAt(channel->getTransmissionFinishTime(), waitSend);
         return;
     }
 

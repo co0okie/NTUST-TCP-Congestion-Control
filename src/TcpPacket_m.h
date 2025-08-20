@@ -1,9 +1,9 @@
 //
-// Generated file, do not edit! Created by opp_msgtool 6.2 from tcp.msg.
+// Generated file, do not edit! Created by opp_msgtool 6.2 from TcpPacket.msg.
 //
 
-#ifndef __TCP_M_H
-#define __TCP_M_H
+#ifndef __TCPPACKET_M_H
+#define __TCPPACKET_M_H
 
 #if defined(__clang__)
 #  pragma clang diagnostic ignored "-Wreserved-id-macro"
@@ -18,7 +18,7 @@
 
 class TcpPacket;
 /**
- * Class generated from <tt>tcp.msg:1</tt> by opp_msgtool.
+ * Class generated from <tt>TcpPacket.msg:1</tt> by opp_msgtool.
  * <pre>
  * packet TcpPacket
  * {
@@ -29,6 +29,7 @@ class TcpPacket;
  *     bool ACK;
  *     bool SYN;
  *     bool FIN;
+ *     uint16_t window;
  *     uint8_t payload[];
  * }
  * </pre>
@@ -43,6 +44,7 @@ class TcpPacket : public ::omnetpp::cPacket
     bool ACK = false;
     bool SYN = false;
     bool FIN = false;
+    uint16_t window = 0;
     uint8_t *payload = nullptr;
     size_t payload_arraysize = 0;
 
@@ -82,6 +84,9 @@ class TcpPacket : public ::omnetpp::cPacket
     virtual bool getFIN() const;
     virtual void setFIN(bool FIN);
 
+    virtual uint16_t getWindow() const;
+    virtual void setWindow(uint16_t window);
+
     virtual void setPayloadArraySize(size_t size);
     virtual size_t getPayloadArraySize() const;
     virtual uint8_t getPayload(size_t k) const;
@@ -102,5 +107,5 @@ template<> inline TcpPacket *fromAnyPtr(any_ptr ptr) { return check_and_cast<Tcp
 
 }  // namespace omnetpp
 
-#endif // ifndef __TCP_M_H
+#endif // ifndef __TCPPACKET_M_H
 

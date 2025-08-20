@@ -31,11 +31,11 @@ PROJECTRELATIVE_PATH = src
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS = $O/tcp.o $O/tcp_m.o
+OBJS = $O/RealisticChannel.o $O/TcpModule.o $O/TcpPacket_m.o
 
 # Message files
 MSGFILES = \
-    tcp.msg
+    TcpPacket.msg
 
 # SM files
 SMFILES =
@@ -74,8 +74,6 @@ endif
 
 #------------------------------------------------------------------------------
 # User-supplied makefile fragment(s)
--include makefrag
-
 #------------------------------------------------------------------------------
 
 # Main target

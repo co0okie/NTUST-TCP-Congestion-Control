@@ -1,10 +1,7 @@
-channel LossyChannel extends ned.DatarateChannel {
+channel RealisticChannel extends ned.DatarateChannel {
     parameters:
         double droprate = default(0);
-    @class(LossyChannel);
-}
-
-channel Channel extends LossyChannel {
+    @class(RealisticChannel);
     datarate = 128kbps;
     delay = 200ms;
 }
@@ -19,5 +16,5 @@ network TcpNetwork {
         client: TcpModule;
         server: TcpModule;
     connections:
-        client.ip <--> Channel { droprate = 0.3; } <--> server.ip;
+        client.ip <--> RealisticChannel { droprate = 0.3; } <--> server.ip;
 }

@@ -1,10 +1,9 @@
-#pragma once
 #include <omnetpp.h>
 
 using omnetpp::cDatarateChannel, omnetpp::cMessage, omnetpp::SendOptions, 
     omnetpp::simtime_t;
 
-class LossyChannel : public cDatarateChannel {
+class RealisticChannel : public cDatarateChannel {
   private:
     double droprate;
   public:
@@ -16,12 +15,12 @@ class LossyChannel : public cDatarateChannel {
     }
   protected:
     virtual Result processMessage(cMessage *msg, const SendOptions& options, simtime_t t) override {
+        setDelay(uniform(0.01, 0.3));
         Result result = cDatarateChannel::processMessage(msg, options, t);
         if (uniform(0,1) < droprate) {
             result.discard = true;
             std::string dropMsg = std::string{msg->getName()} + " is dropped.\n";
             EV << dropMsg;
-            bubble(dropMsg.c_str());
         }
         return result;
     }
@@ -31,4 +30,4 @@ class LossyChannel : public cDatarateChannel {
     }
 };
 
-Define_Channel(LossyChannel);
+Define_Channel(RealisticChannel);

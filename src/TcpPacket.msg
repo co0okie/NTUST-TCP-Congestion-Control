@@ -6,5 +6,6 @@ packet TcpPacket {
     bool ACK;
     bool SYN;
     bool FIN;
+    uint16_t window;
     uint8_t payload[];
 }
