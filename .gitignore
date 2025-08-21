@@ -1,11 +1,8 @@
 /.vscode/
 /.settings/
-/.cproject
-/.oppbuildspec
-/.nedfolders
 /.nedexclusions
 /out/
 /simulations/results/
-/simulations/.qtenvrc
 /simulations/run
 /src/*.exe
+/src/Makefile.*
