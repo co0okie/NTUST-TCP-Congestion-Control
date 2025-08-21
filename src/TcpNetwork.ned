@@ -24,5 +24,5 @@ network TcpNetwork {
         client: ClientModule;
         server: ServerModule;
     connections:
-        client.ip <--> RealisticChannel { droprate = 0.3; } <--> server.ip;
+        client.ip <--> RealisticChannel { droprate = 0.01; } <--> server.ip;
 }

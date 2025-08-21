@@ -15,7 +15,7 @@ class RealisticChannel : public cDatarateChannel {
     }
   protected:
     virtual Result processMessage(cMessage *msg, const SendOptions& options, simtime_t t) override {
-        setDelay(uniform(0.01, 0.3));
+        setDelay(truncnormal(0.1, 0.01));
         Result result = cDatarateChannel::processMessage(msg, options, t);
         if (uniform(0,1) < droprate) {
             result.discard = true;
