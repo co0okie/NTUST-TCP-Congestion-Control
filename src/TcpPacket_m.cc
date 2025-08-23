@@ -176,13 +176,9 @@ TcpPacket& TcpPacket::operator=(const TcpPacket& other)
 
 void TcpPacket::copy(const TcpPacket& other)
 {
-    this->src = other.src;
-    this->dst = other.dst;
     this->seq = other.seq;
     this->ack = other.ack;
     this->ACK = other.ACK;
-    this->SYN = other.SYN;
-    this->FIN = other.FIN;
     this->window = other.window;
     delete [] this->payload;
     this->payload = (other.payload_arraysize==0) ? nullptr : new uint8_t[other.payload_arraysize];
@@ -195,13 +191,9 @@ void TcpPacket::copy(const TcpPacket& other)
 void TcpPacket::parsimPack(omnetpp::cCommBuffer *b) const
 {
     ::omnetpp::cPacket::parsimPack(b);
-    doParsimPacking(b,this->src);
-    doParsimPacking(b,this->dst);
     doParsimPacking(b,this->seq);
     doParsimPacking(b,this->ack);
     doParsimPacking(b,this->ACK);
-    doParsimPacking(b,this->SYN);
-    doParsimPacking(b,this->FIN);
     doParsimPacking(b,this->window);
     b->pack(payload_arraysize);
     doParsimArrayPacking(b,this->payload,payload_arraysize);
@@ -210,13 +202,9 @@ void TcpPacket::parsimPack(omnetpp::cCommBuffer *b) const
 void TcpPacket::parsimUnpack(omnetpp::cCommBuffer *b)
 {
     ::omnetpp::cPacket::parsimUnpack(b);
-    doParsimUnpacking(b,this->src);
-    doParsimUnpacking(b,this->dst);
     doParsimUnpacking(b,this->seq);
     doParsimUnpacking(b,this->ack);
     doParsimUnpacking(b,this->ACK);
-    doParsimUnpacking(b,this->SYN);
-    doParsimUnpacking(b,this->FIN);
     doParsimUnpacking(b,this->window);
     delete [] this->payload;
     b->unpack(payload_arraysize);
@@ -226,26 +214,6 @@ void TcpPacket::parsimUnpack(omnetpp::cCommBuffer *b)
         this->payload = new uint8_t[payload_arraysize];
         doParsimArrayUnpacking(b,this->payload,payload_arraysize);
     }
-}
-
-uint16_t TcpPacket::getSrc() const
-{
-    return this->src;
-}
-
-void TcpPacket::setSrc(uint16_t src)
-{
-    this->src = src;
-}
-
-uint16_t TcpPacket::getDst() const
-{
-    return this->dst;
-}
-
-void TcpPacket::setDst(uint16_t dst)
-{
-    this->dst = dst;
 }
 
 uint32_t TcpPacket::getSeq() const
@@ -278,32 +246,12 @@ void TcpPacket::setACK(bool ACK)
     this->ACK = ACK;
 }
 
-bool TcpPacket::getSYN() const
-{
-    return this->SYN;
-}
-
-void TcpPacket::setSYN(bool SYN)
-{
-    this->SYN = SYN;
-}
-
-bool TcpPacket::getFIN() const
-{
-    return this->FIN;
-}
-
-void TcpPacket::setFIN(bool FIN)
-{
-    this->FIN = FIN;
-}
-
-uint16_t TcpPacket::getWindow() const
+uint32_t TcpPacket::getWindow() const
 {
     return this->window;
 }
 
-void TcpPacket::setWindow(uint16_t window)
+void TcpPacket::setWindow(uint32_t window)
 {
     this->window = window;
 }
@@ -379,13 +327,9 @@ class TcpPacketDescriptor : public omnetpp::cClassDescriptor
   private:
     mutable const char **propertyNames;
     enum FieldConstants {
-        FIELD_src,
-        FIELD_dst,
         FIELD_seq,
         FIELD_ack,
         FIELD_ACK,
-        FIELD_SYN,
-        FIELD_FIN,
         FIELD_window,
         FIELD_payload,
     };
@@ -454,7 +398,7 @@ const char *TcpPacketDescriptor::getProperty(const char *propertyName) const
 int TcpPacketDescriptor::getFieldCount() const
 {
     omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
-    return base ? 9+base->getFieldCount() : 9;
+    return base ? 5+base->getFieldCount() : 5;
 }
 
 unsigned int TcpPacketDescriptor::getFieldTypeFlags(int field) const
@@ -466,17 +410,13 @@ unsigned int TcpPacketDescriptor::getFieldTypeFlags(int field) const
         field -= base->getFieldCount();
     }
     static unsigned int fieldTypeFlags[] = {
-        FD_ISEDITABLE,    // FIELD_src
-        FD_ISEDITABLE,    // FIELD_dst
         FD_ISEDITABLE,    // FIELD_seq
         FD_ISEDITABLE,    // FIELD_ack
         FD_ISEDITABLE,    // FIELD_ACK
-        FD_ISEDITABLE,    // FIELD_SYN
-        FD_ISEDITABLE,    // FIELD_FIN
         FD_ISEDITABLE,    // FIELD_window
         FD_ISARRAY | FD_ISEDITABLE | FD_ISRESIZABLE,    // FIELD_payload
     };
-    return (field >= 0 && field < 9) ? fieldTypeFlags[field] : 0;
+    return (field >= 0 && field < 5) ? fieldTypeFlags[field] : 0;
 }
 
 const char *TcpPacketDescriptor::getFieldName(int field) const
@@ -488,32 +428,24 @@ const char *TcpPacketDescriptor::getFieldName(int field) const
         field -= base->getFieldCount();
     }
     static const char *fieldNames[] = {
-        "src",
-        "dst",
         "seq",
         "ack",
         "ACK",
-        "SYN",
-        "FIN",
         "window",
         "payload",
     };
-    return (field >= 0 && field < 9) ? fieldNames[field] : nullptr;
+    return (field >= 0 && field < 5) ? fieldNames[field] : nullptr;
 }
 
 int TcpPacketDescriptor::findField(const char *fieldName) const
 {
     omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
     int baseIndex = base ? base->getFieldCount() : 0;
-    if (strcmp(fieldName, "src") == 0) return baseIndex + 0;
-    if (strcmp(fieldName, "dst") == 0) return baseIndex + 1;
-    if (strcmp(fieldName, "seq") == 0) return baseIndex + 2;
-    if (strcmp(fieldName, "ack") == 0) return baseIndex + 3;
-    if (strcmp(fieldName, "ACK") == 0) return baseIndex + 4;
-    if (strcmp(fieldName, "SYN") == 0) return baseIndex + 5;
-    if (strcmp(fieldName, "FIN") == 0) return baseIndex + 6;
-    if (strcmp(fieldName, "window") == 0) return baseIndex + 7;
-    if (strcmp(fieldName, "payload") == 0) return baseIndex + 8;
+    if (strcmp(fieldName, "seq") == 0) return baseIndex + 0;
+    if (strcmp(fieldName, "ack") == 0) return baseIndex + 1;
+    if (strcmp(fieldName, "ACK") == 0) return baseIndex + 2;
+    if (strcmp(fieldName, "window") == 0) return baseIndex + 3;
+    if (strcmp(fieldName, "payload") == 0) return baseIndex + 4;
     return base ? base->findField(fieldName) : -1;
 }
 
@@ -526,17 +458,13 @@ const char *TcpPacketDescriptor::getFieldTypeString(int field) const
         field -= base->getFieldCount();
     }
     static const char *fieldTypeStrings[] = {
-        "uint16_t",    // FIELD_src
-        "uint16_t",    // FIELD_dst
         "uint32_t",    // FIELD_seq
         "uint32_t",    // FIELD_ack
         "bool",    // FIELD_ACK
-        "bool",    // FIELD_SYN
-        "bool",    // FIELD_FIN
-        "uint16_t",    // FIELD_window
+        "uint32_t",    // FIELD_window
         "uint8_t",    // FIELD_payload
     };
-    return (field >= 0 && field < 9) ? fieldTypeStrings[field] : nullptr;
+    return (field >= 0 && field < 5) ? fieldTypeStrings[field] : nullptr;
 }
 
 const char **TcpPacketDescriptor::getFieldPropertyNames(int field) const
@@ -621,13 +549,9 @@ std::string TcpPacketDescriptor::getFieldValueAsString(omnetpp::any_ptr object, 
     }
     TcpPacket *pp = omnetpp::fromAnyPtr<TcpPacket>(object); (void)pp;
     switch (field) {
-        case FIELD_src: return ulong2string(pp->getSrc());
-        case FIELD_dst: return ulong2string(pp->getDst());
         case FIELD_seq: return ulong2string(pp->getSeq());
         case FIELD_ack: return ulong2string(pp->getAck());
         case FIELD_ACK: return bool2string(pp->getACK());
-        case FIELD_SYN: return bool2string(pp->getSYN());
-        case FIELD_FIN: return bool2string(pp->getFIN());
         case FIELD_window: return ulong2string(pp->getWindow());
         case FIELD_payload: return ulong2string(pp->getPayload(i));
         default: return "";
@@ -646,13 +570,9 @@ void TcpPacketDescriptor::setFieldValueAsString(omnetpp::any_ptr object, int fie
     }
     TcpPacket *pp = omnetpp::fromAnyPtr<TcpPacket>(object); (void)pp;
     switch (field) {
-        case FIELD_src: pp->setSrc(string2ulong(value)); break;
-        case FIELD_dst: pp->setDst(string2ulong(value)); break;
         case FIELD_seq: pp->setSeq(string2ulong(value)); break;
         case FIELD_ack: pp->setAck(string2ulong(value)); break;
         case FIELD_ACK: pp->setACK(string2bool(value)); break;
-        case FIELD_SYN: pp->setSYN(string2bool(value)); break;
-        case FIELD_FIN: pp->setFIN(string2bool(value)); break;
         case FIELD_window: pp->setWindow(string2ulong(value)); break;
         case FIELD_payload: pp->setPayload(i,string2ulong(value)); break;
         default: throw omnetpp::cRuntimeError("Cannot set field %d of class 'TcpPacket'", field);
@@ -669,13 +589,9 @@ omnetpp::cValue TcpPacketDescriptor::getFieldValue(omnetpp::any_ptr object, int 
     }
     TcpPacket *pp = omnetpp::fromAnyPtr<TcpPacket>(object); (void)pp;
     switch (field) {
-        case FIELD_src: return (omnetpp::intval_t)(pp->getSrc());
-        case FIELD_dst: return (omnetpp::intval_t)(pp->getDst());
         case FIELD_seq: return (omnetpp::intval_t)(pp->getSeq());
         case FIELD_ack: return (omnetpp::intval_t)(pp->getAck());
         case FIELD_ACK: return pp->getACK();
-        case FIELD_SYN: return pp->getSYN();
-        case FIELD_FIN: return pp->getFIN();
         case FIELD_window: return (omnetpp::intval_t)(pp->getWindow());
         case FIELD_payload: return (omnetpp::intval_t)(pp->getPayload(i));
         default: throw omnetpp::cRuntimeError("Cannot return field %d of class 'TcpPacket' as cValue -- field index out of range?", field);
@@ -694,14 +610,10 @@ void TcpPacketDescriptor::setFieldValue(omnetpp::any_ptr object, int field, int 
     }
     TcpPacket *pp = omnetpp::fromAnyPtr<TcpPacket>(object); (void)pp;
     switch (field) {
-        case FIELD_src: pp->setSrc(omnetpp::checked_int_cast<uint16_t>(value.intValue())); break;
-        case FIELD_dst: pp->setDst(omnetpp::checked_int_cast<uint16_t>(value.intValue())); break;
         case FIELD_seq: pp->setSeq(omnetpp::checked_int_cast<uint32_t>(value.intValue())); break;
         case FIELD_ack: pp->setAck(omnetpp::checked_int_cast<uint32_t>(value.intValue())); break;
         case FIELD_ACK: pp->setACK(value.boolValue()); break;
-        case FIELD_SYN: pp->setSYN(value.boolValue()); break;
-        case FIELD_FIN: pp->setFIN(value.boolValue()); break;
-        case FIELD_window: pp->setWindow(omnetpp::checked_int_cast<uint16_t>(value.intValue())); break;
+        case FIELD_window: pp->setWindow(omnetpp::checked_int_cast<uint32_t>(value.intValue())); break;
         case FIELD_payload: pp->setPayload(i,omnetpp::checked_int_cast<uint8_t>(value.intValue())); break;
         default: throw omnetpp::cRuntimeError("Cannot set field %d of class 'TcpPacket'", field);
     }

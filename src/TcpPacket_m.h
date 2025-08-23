@@ -22,14 +22,10 @@ class TcpPacket;
  * <pre>
  * packet TcpPacket
  * {
- *     uint16_t src;
- *     uint16_t dst;
  *     uint32_t seq;
  *     uint32_t ack;
  *     bool ACK;
- *     bool SYN;
- *     bool FIN;
- *     uint16_t window;
+ *     uint32_t window;
  *     uint8_t payload[];
  * }
  * </pre>
@@ -37,14 +33,10 @@ class TcpPacket;
 class TcpPacket : public ::omnetpp::cPacket
 {
   protected:
-    uint16_t src = 0;
-    uint16_t dst = 0;
     uint32_t seq = 0;
     uint32_t ack = 0;
     bool ACK = false;
-    bool SYN = false;
-    bool FIN = false;
-    uint16_t window = 0;
+    uint32_t window = 0;
     uint8_t *payload = nullptr;
     size_t payload_arraysize = 0;
 
@@ -63,12 +55,6 @@ class TcpPacket : public ::omnetpp::cPacket
     virtual void parsimPack(omnetpp::cCommBuffer *b) const override;
     virtual void parsimUnpack(omnetpp::cCommBuffer *b) override;
 
-    virtual uint16_t getSrc() const;
-    virtual void setSrc(uint16_t src);
-
-    virtual uint16_t getDst() const;
-    virtual void setDst(uint16_t dst);
-
     virtual uint32_t getSeq() const;
     virtual void setSeq(uint32_t seq);
 
@@ -78,14 +64,8 @@ class TcpPacket : public ::omnetpp::cPacket
     virtual bool getACK() const;
     virtual void setACK(bool ACK);
 
-    virtual bool getSYN() const;
-    virtual void setSYN(bool SYN);
-
-    virtual bool getFIN() const;
-    virtual void setFIN(bool FIN);
-
-    virtual uint16_t getWindow() const;
-    virtual void setWindow(uint16_t window);
+    virtual uint32_t getWindow() const;
+    virtual void setWindow(uint32_t window);
 
     virtual void setPayloadArraySize(size_t size);
     virtual size_t getPayloadArraySize() const;

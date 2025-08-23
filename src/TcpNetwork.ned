@@ -2,8 +2,8 @@ channel RealisticChannel extends ned.DatarateChannel {
     parameters:
         double droprate = default(0);
     @class(RealisticChannel);
-    datarate = 128kbps;
-    delay = 200ms;
+    datarate = 1Mbps;
+    delay = 1s;
 }
 
 simple TcpModule {
@@ -21,8 +21,12 @@ module ClientModule extends TcpModule {
 
 network TcpNetwork {
     submodules:
-        client: ClientModule;
-        server: ServerModule;
+        client: ClientModule {
+            @display("p=41,59");
+        }
+        server: ServerModule {
+            @display("p=99,59");
+        }
     connections:
         client.ip <--> RealisticChannel { droprate = 0.01; } <--> server.ip;
 }
