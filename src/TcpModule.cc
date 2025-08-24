@@ -4,6 +4,7 @@
 #include <string>
 #include <algorithm>
 #include <sstream>
+#include <functional>
 #include "TcpPacket_m.h"
 
 using std::deque, std::string, std::to_string, std::map, std::pair, std::stringstream;
@@ -20,11 +21,9 @@ typedef int32_t i32;
 typedef int16_t i16;
 typedef int8_t i8;
 
-bool le(u32 a, u32 b) {
-    return i32(b - a) >= 0;
-}
-bool lt(u32 a, u32 b) {
-    return i32(b - a) > 0;
+// return true if x in [a, b)
+template <typename T> bool within(T a, T x, T b) {
+    return x - a < b - a;
 }
 
 class TcpModule : public cSimpleModule {
@@ -49,7 +48,6 @@ class TcpModule : public cSimpleModule {
         u32 begin_seq;
         u32 end_seq;
         simtime_t send_time;
-        bool isResend;
     };
     deque<SendRecord> snd_record; // packet that is sent but not ack
     u32 cwnd;
@@ -61,7 +59,10 @@ class TcpModule : public cSimpleModule {
     bool ACK;
     u32 rcv_wnd;
     deque<u8> rcv_buf;
-    map<u32, u32, decltype(lt)*> rcv_ack{&lt}; // <ack, size>, record receiving packet
+    std::function<bool(u32, u32)> rcv_seg_lt = [&](u32 a, u32 b) -> bool { 
+        return within(rcv_nxt, a, b); 
+    };
+    map<u32, u32, decltype(rcv_seg_lt)> rcv_seg{rcv_seg_lt}; // <seq, size>, record receiving packet
 
   protected:
     cMessage* waitSend = new cMessage("waitSend");
@@ -80,7 +81,7 @@ TcpModule::~TcpModule() {
 }
 
 void TcpModule::initialize() {
-    mss = 1460;
+    mss = 1000;
     rwnd = 10000;
     snd_una = 0;
     snd_nxt = snd_una;
@@ -139,7 +140,7 @@ void TcpModule::handleWaitSend() {
     const auto seq = rexmit ? rexmit_nxt : snd_nxt;
     const u32 swnd = std::min(rwnd, cwnd);
     const u32 snd_end = snd_una + std::min(swnd, u32(snd_buf.size()));
-    const i32 sendableByteSize = std::max(0, i32(snd_end - seq));
+    const u32 sendableByteSize = snd_end - seq;
     const bool hasPayloadToSend = sendableByteSize > 0;
 
     if (!hasPayloadToSend && !ACK) {
@@ -175,32 +176,28 @@ void TcpModule::handleWaitSend() {
     EV << getName() << ": send " << packet->getName() << "\n";
     send(packet, "ip$o");
 
-    if (hasPayloadToSend && !rtoTimer->isScheduled()) scheduleAfter(rt.rto, rtoTimer);
-    if (lt(new_seq, snd_end)) scheduleAt(channel->getTransmissionFinishTime(), waitSend);
+    if (hasPayloadToSend && !rtoTimer->isScheduled()) 
+        scheduleAfter(rt.rto, rtoTimer);
+    if (within(snd_una, new_seq, snd_end)) 
+        scheduleAt(channel->getTransmissionFinishTime(), waitSend);
 
-    if (hasPayloadToSend) {
-        auto it = std::find_if(snd_record.begin(), snd_record.end(), 
-            [&](const SendRecord& rec) { return lt(seq, rec.end_seq); });
-        if (it == snd_record.end()) {
-            snd_record.push_back({
-                .begin_seq = snd_nxt, .end_seq = snd_nxt + payloadSize, 
-                .send_time = simTime(), .isResend = false
-            });
-        } else {
-            it->isResend = true;
-        }
+    if (hasPayloadToSend && !rexmit) {
+        snd_record.push_back({
+            .begin_seq = snd_nxt, .end_seq = snd_nxt + payloadSize, 
+            .send_time = simTime()
+        });
     }
     // for (auto& rec : snd_record) {
     //     EV << getName() << ": [" << rec.begin_seq << ", " << rec.end_seq << ") time " << rec.send_time << " " << rec.isResend << "\n";
     // }
     if (rexmit) {
-        if (le(snd_nxt, new_seq)) {
+        if (within(snd_una, new_seq, snd_nxt)) {
+            rexmit_nxt = new_seq;
+        } else {
             EV << getName() << ": new seq " << new_seq << " reach SND.NXT " <<
                 snd_nxt << ", exit retransmission\n";
             rexmit = false;
             snd_nxt = new_seq;
-        } else {
-            rexmit_nxt = new_seq;
         }
     } else {
         snd_nxt = new_seq;
@@ -212,13 +209,13 @@ void TcpModule::handleAck(TcpPacket* msg) {
     if (!msg->getACK()) return;
     const auto seg_ack = msg->getAck();
     EV << getName() << ": receive ack " << seg_ack << "\n";
-    if (!(lt(snd_una, seg_ack) && le(seg_ack, snd_nxt))) {
+    if (!within(snd_una, seg_ack - 1, snd_nxt)) {
         EV << getName() << ": ignore ack " << seg_ack << " not within range (" 
             << snd_una << ", " << snd_nxt << "]\n";
         return;
     }
     if (!waitSend->isScheduled()) scheduleAfter(0.0, waitSend);
-    const i32 newAckSize = seg_ack - snd_una;
+    const u32 newAckSize = seg_ack - snd_una;
     EV << getName() << ": new ack range [" << snd_una << ", " << seg_ack << ")\n";
     const auto matchedRecord = std::find_if(snd_record.begin(), snd_record.end(), 
         [&](const SendRecord& rec) { return rec.end_seq == seg_ack; });
@@ -226,7 +223,7 @@ void TcpModule::handleAck(TcpPacket* msg) {
     if (!foundMatchedRecord) {
         EV << getName() << ": ack " << seg_ack << " not match\n";
     }
-    if (foundMatchedRecord && !matchedRecord->isResend) {
+    if (foundMatchedRecord) {
         const auto& r = matchedRecord;
         rt = getNewRt((simTime() - r->send_time).dbl());
         EV << getName() << ": ack " << seg_ack << " match [" << r->begin_seq <<
@@ -235,45 +232,44 @@ void TcpModule::handleAck(TcpPacket* msg) {
     }
     cancelEvent(rtoTimer);
     // exist unacknowledged bytes
-    if (lt(seg_ack, snd_nxt)) {
+    if (within(snd_una, seg_ack, snd_nxt)) {
         EV << getName() << ": reschedule RTO\n";
         scheduleAfter(rt.rto, rtoTimer);
     }
 
-    cwnd = getNewCwnd(
-        foundMatchedRecord ? 
-        matchedRecord->end_seq - matchedRecord->begin_seq :
-        mss
-    );
+    cwnd = getNewCwnd(newAckSize);
     EV << getName() << ": cwnd " << cwnd << " ssthresh " << ssthresh << "\n";
     
-    for (auto it = snd_record.begin(); it != snd_record.end() && le(it->end_seq, seg_ack);) {
+    for (auto it = snd_record.begin(); 
+    it != snd_record.end() && within(it->end_seq, seg_ack, snd_nxt);) {
         it = snd_record.erase(it);
     }
     // for (auto& rec : snd_record) {
     //     EV << getName() << ": [" << rec.begin_seq << ", " << rec.end_seq << ") time " << rec.send_time << " " << rec.isResend << "\n";
     // }
     snd_buf.erase(snd_buf.begin(), snd_buf.begin() + std::min(size_t(newAckSize), snd_buf.size()));
-    if (rexmit && le(rexmit_nxt, seg_ack)) {
-        rexmit_nxt = seg_ack;
-        if (le(snd_nxt, rexmit_nxt)) {
-            EV << getName() << ": retransmission seq " << rexmit_nxt << 
-                " reach SND.NXT " << snd_nxt << ", exit retransmission\n";
+    if (rexmit) {
+        if (seg_ack == snd_nxt) {
+            EV << getName() << ": ack " << seg_ack << 
+            " reach SND.NXT " << snd_nxt << ", exit retransmission\n";
             rexmit = false;
-            snd_nxt = rexmit_nxt;
+        } else if (within(snd_una, rexmit_nxt, seg_ack)) {
+            EV << getName() << ": ack " << seg_ack << " > next retransmit seq " <<
+                rexmit_nxt << ", skip to ack\n";
+            rexmit_nxt = seg_ack;
         }
     }
-
-    snd_una += newAckSize;
+    snd_una = seg_ack;
 }
 
 void TcpModule::handleTcpPayload(TcpPacket* msg) {
     const u32 seg_seq = msg->getSeq();
     const u32 seg_end = seg_seq + msg->getPayloadArraySize();
-    const u32 rcv_user = rcv_nxt + rcv_wnd - rcv_buf.size();
+    const u32 rcv_last = rcv_nxt + rcv_wnd;
+    const u32 rcv_user = rcv_last - rcv_buf.size();
     if (!(
-        (le(rcv_nxt, seg_seq) && lt(seg_seq, rcv_nxt + rcv_wnd)) ||
-        (lt(rcv_nxt, seg_end) && le(seg_end, rcv_nxt + rcv_wnd))
+        within(rcv_nxt, seg_seq, rcv_last) || 
+        within(rcv_nxt, seg_end - 1u, rcv_last)
     )) {
         EV << getName() << ": receive [" << seg_seq << ", " << seg_end << 
             ") not overlap with window [" << rcv_nxt << ", " << rcv_nxt + rcv_wnd << ")\n";
@@ -284,31 +280,39 @@ void TcpModule::handleTcpPayload(TcpPacket* msg) {
     const size_t validPayloadSize = std::min(msg->getPayloadArraySize(), 
         size_t(rcv_nxt + rcv_wnd - seg_seq));
     if (!validPayloadSize) {
-        EV << getName() << ": receive seq " << seg_seq << " no payload\n";
         return;
     }
     EV << getName() << ": receive [" << msg->getSeq() << ", " << msg->getSeq() + validPayloadSize << ")\n";
 
-    if (const auto existingSeg = rcv_ack.find(msg->getSeq()); 
-    existingSeg == rcv_ack.end() || existingSeg->second < validPayloadSize) {
-        rcv_ack[seg_seq] = validPayloadSize;
+    if (const auto existingSeg = rcv_seg.find(msg->getSeq()); 
+    existingSeg == rcv_seg.end() || existingSeg->second < validPayloadSize) {
+        rcv_seg[seg_seq] = validPayloadSize;
         for (size_t i0 = seg_seq - rcv_user, i = 0; i < validPayloadSize && i0 + i < rcv_buf.size(); i++) 
             rcv_buf[i0 + i] = msg->getPayload(i);
     } else {
         EV << getName() << ": [" << msg->getSeq() << ", " << msg->getSeq() + validPayloadSize << ") already exist\n";
     }
     auto new_rcv_nxt = rcv_nxt;
-    for (auto it = rcv_ack.begin(); it != rcv_ack.end() && le(it->first, new_rcv_nxt);) {
+    for (auto it = rcv_seg.begin(); 
+    it != rcv_seg.end() && within(it->first, new_rcv_nxt, rcv_last);) {
         new_rcv_nxt = it->first + it->second;
-        it = rcv_ack.erase(it);
+        it = rcv_seg.erase(it);
     }
     auto new_rcv_wnd = rcv_nxt + rcv_wnd - new_rcv_nxt;
+
+    if (!rcv_seg.empty()) {
+        EV << getName() << ": stored segments";
+        for (auto& [seq, size] : rcv_seg) {
+            EV << " [" << seq << ", " << seq + size << ")";
+        }
+        EV << "\n";
+    }
 
     // EV << getName() << ": rcv_nxt " << rcv_nxt << "\n";
     // EV << getName() << ": rcv_wnd " << rcv_wnd << "\n";
     // EV << getName() << ": new_rcv_nxt " << new_rcv_nxt << "\n";
     // EV << getName() << ": new_rcv_wnd " << new_rcv_wnd << "\n";
-    // for (auto& [k, v] : rcv_ack) {
+    // for (auto& [k, v] : rcv_seg) {
     //     EV << getName() << ": [" << k << ", " << k + v << ")\n";
     // }
 
@@ -323,8 +327,9 @@ void TcpModule::handleTcpPayload(TcpPacket* msg) {
 }
 
 void TcpModule::appConsume() {
-    const auto rcv_user = rcv_nxt + rcv_wnd - rcv_buf.size();
-    if (!lt(rcv_user, rcv_nxt)) return;
+    const u32 rcv_user = rcv_nxt + rcv_wnd - u32(rcv_buf.size());
+    // nothing to consume
+    if (within(rcv_nxt, rcv_user, rcv_nxt + rcv_wnd)) return;
     const auto consume_bytes = rcv_nxt - rcv_user;
     const auto new_rcv_wnd = rcv_wnd + consume_bytes;
     const auto rcv_buf_size = rcv_buf.size();
@@ -344,9 +349,8 @@ void TcpModule::handleRtoTimer() {
     if (rt.rto > 60) rt.rto = 60;
     EV << getName() << ": rto " << rt.rto << "\n";
 
-    for (auto& rec : snd_record) {
-        rec.isResend = true;
-    }
+    // not calculate RTT for retransmitted data
+    snd_record.clear();
 
     // congestion avoidance
     ssthresh = std::max(flightSize / 2, 2 * mss);
